@@ -199,8 +199,11 @@ def load_df(conn: psycopg.Connection, tokens: list[str]) -> tuple[dict[str, int]
 # vec_rank / kw_rank / term_rank 로 확인할 수 있다.
 #
 # tm(용어 연계) 축은 질의 확장이 법령용어를 덧붙였을 때만 후보를 낸다.
-# 정렬은 핵심용어 조문 먼저, 그 안에서 벡터 거리순이다. 핵심용어(140101)는
-# 그 조문이 용어를 정의·규율한다는 뜻이라 단순 언급 조문보다 앞세울 근거가 있다.
+# 정렬은 핵심용어 조문 먼저, 같은 핵심용어끼리는 그 용어가 조문에 많이 나오는 순,
+# 그 안에서 벡터 거리순이다. 핵심용어(140101)는 그 조문이 용어를 정의·규율한다는
+# 뜻이라 단순 언급 조문보다 앞세울 근거가 있고, 등장 횟수는 핵심용어 조문이 여럿일 때
+# 어느 쪽이 그 용어를 실제로 다루는지 가른다(제6조가 사업연도 핵심 조문 중 1위가 된다).
+# 로그를 씌워도 결과가 같아 튜닝할 값이 없다 — 가중치가 아니라 tie-break 다.
 _HYBRID_SQL = """
 WITH vec AS (
     SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(qv)s) AS rank
@@ -219,6 +222,8 @@ kw AS (
 tm AS (
     SELECT c.id,
            ROW_NUMBER() OVER (ORDER BY bool_or(t.is_core) DESC,
+                                       max((length(a.body) - length(replace(a.body, t.term, '')))
+                                           / NULLIF(length(t.term), 0)) DESC,
                                        min(c.embedding <=> %(qv)s)) AS rank
     FROM chunk c
     JOIN article a ON a.id = c.article_pk
@@ -228,7 +233,10 @@ tm AS (
                        AND t.branch_no = a.branch_no
     WHERE t.term = ANY(%(terms)s::text[]) AND c.embedding IS NOT NULL
     GROUP BY c.id
-    ORDER BY bool_or(t.is_core) DESC, min(c.embedding <=> %(qv)s)
+    ORDER BY bool_or(t.is_core) DESC,
+             max((length(a.body) - length(replace(a.body, t.term, '')))
+                 / NULLIF(length(t.term), 0)) DESC,
+             min(c.embedding <=> %(qv)s)
     LIMIT %(pool)s
 )
 SELECT c.id, l.name, a.label, c.header, c.text, a.enforced, c.source_type,

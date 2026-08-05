@@ -18,6 +18,14 @@ from .db import SearchHit
 
 VERDICTS = ("위반 소지 있음", "위반으로 보기 어려움", "정보 부족")
 
+
+class JudgeError(RuntimeError):
+    """LLM 백엔드를 쓸 수 없거나 응답을 해석할 수 없을 때.
+
+    호출부가 트레이스백 대신 안내 문구를 내보낼 수 있도록 백엔드 쪽 실패를
+    한 종류로 모은다. 검색은 이미 끝난 뒤라 결과 자체는 살아 있다.
+    """
+
 JUDGE_MODEL = "sonnet"
 
 _INSTRUCTIONS = f"""당신은 한국 법령 검토 보조자입니다.
@@ -52,9 +60,8 @@ def build_prompt(question: str, hits: list[SearchHit]) -> str:
     for i, h in enumerate(hits, 1):
         # 본문 API 가 없어 안건명·링크만 있는 자료는 근거로 쓰면 안 된다.
         tag = " [본문 미제공 — 참고용]" if h.source_type == "reference" else ""
-        blocks.append(
-            f"[{i}] {h.law_name} {h.label} (시행 {h.enforced}){tag}\n{h.text}"
-        )
+        dated = f" ({h.dated})" if h.dated else ""
+        blocks.append(f"[{i}] {h.law_name} {h.label}{dated}{tag}\n{h.text}")
     sources = "\n\n".join(blocks) if blocks else "(검색된 조문 없음)"
     return f"{_INSTRUCTIONS}\n\n[질의]\n{question}\n\n[참고 조문]\n{sources}"
 
@@ -88,14 +95,27 @@ def parse_judgment(data: dict) -> Judgment:
 
 def judge(question: str, hits: list[SearchHit], model: str = JUDGE_MODEL, timeout: int = 180) -> Judgment:
     if not shutil.which("claude"):
-        raise RuntimeError("claude CLI 를 찾을 수 없습니다. 이 프로젝트의 LLM 백엔드입니다.")
-    result = subprocess.run(
-        ["claude", "-p", build_prompt(question, hits), "--output-format", "json", "--model", model],
-        capture_output=True, text=True, timeout=timeout,
-    )
+        raise JudgeError("claude CLI 를 찾을 수 없습니다. 이 프로젝트의 LLM 백엔드입니다.")
+    try:
+        result = subprocess.run(
+            ["claude", "-p", build_prompt(question, hits), "--output-format", "json", "--model", model],
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise JudgeError(f"claude CLI 가 {timeout}초 안에 응답하지 않았습니다.") from exc
+    except OSError as exc:
+        # which 는 통과하는데 exec 에서 죽는 경우가 있다. 설치가 깨지면
+        # PATH 에 실행 불가능한 파일만 남는다 (Errno 8 Exec format error).
+        raise JudgeError(f"claude CLI 를 실행할 수 없습니다: {exc}") from exc
     if result.returncode != 0:
-        raise RuntimeError(f"claude CLI 실패 (exit {result.returncode}): {result.stderr[:300]}")
-    envelope = json.loads(result.stdout)
+        raise JudgeError(f"claude CLI 실패 (exit {result.returncode}): {result.stderr[:300]}")
+    try:
+        envelope = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise JudgeError(f"claude CLI 응답을 읽을 수 없습니다: {result.stdout[:200]!r}") from exc
     if envelope.get("is_error"):
-        raise RuntimeError(f"claude CLI 오류: {envelope.get('result', '')[:300]}")
-    return parse_judgment(extract_json(envelope["result"]))
+        raise JudgeError(f"claude CLI 오류: {envelope.get('result', '')[:300]}")
+    try:
+        return parse_judgment(extract_json(envelope["result"]))
+    except (KeyError, ValueError) as exc:
+        raise JudgeError(f"판정 응답을 해석하지 못했습니다: {exc}") from exc

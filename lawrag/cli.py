@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from collections import Counter
+
 import requests
 import typer
 
@@ -16,7 +18,8 @@ from . import db as dbm
 from .drf_client import DrfClient, DrfError
 from .embedder import embed, embed_one
 from .terms import expand_query, expansion_terms, load_aliases
-from .parser import chunk_article, parse_law
+from . import parser
+from .parser import Law, chunk_article, parse_law
 
 app = typer.Typer(add_completion=False, help="국가법령정보 기반 조문 검색·위법 점검")
 
@@ -31,6 +34,15 @@ TARGET_LAWS = [
 ]
 
 DISCLAIMER = "※ 이 결과는 법률 자문이 아니며, 반드시 원문과 전문가 검토로 확인하세요."
+
+# 결정문 수집 범위. 여기가 불변식 6(법인세 + 외부감사 2축)을 지키는 지점이다.
+#  - 심판례: 사건명 검색이라 세목이 섞인다. 본문의 세목으로 한 번 더 거른다.
+#  - 증선위: 필터가 query 뿐인데 전체가 868건이라 좁힐 필요가 없다.
+# 행정규칙(admrul)은 org 가 부처 단위 필터라 2축보다 넓어져 넣지 않았다.
+DECISION_SCOPE = {
+    "tax": (parser.TAX_TRIBUNAL, {"query": "법인세", "rslYd": "20200101~20251231"}, ("법인",)),
+    "sfc": (parser.SFC, {}, ()),
+}
 
 
 def _ranks(hit) -> str:
@@ -132,6 +144,104 @@ def refresh() -> None:
     ingest(query=None, limit=0)
 
 
+@app.command("ingest-decisions")
+def ingest_decisions(
+    source: str = typer.Option("all", "--source", "-s", help=f"{' / '.join(DECISION_SCOPE)} / all"),
+    limit: int = typer.Option(0, "--limit", "-n", help="자료원당 상한 (0=제한 없음)"),
+) -> None:
+    """결정문(심판례·증선위 의결)을 수집해 적재한다.
+
+    법령 ingest 와 다른 경로다. 결정문에는 조 구조가 없고, 사건번호가 본문 응답에
+    없어서 목록에서 챙겨 와야 한다. 건마다 커밋되므로 끊기면 그냥 다시 돌리면 된다.
+    """
+    names = list(DECISION_SCOPE) if source == "all" else [source]
+    if unknown := [n for n in names if n not in DECISION_SCOPE]:
+        _err(f"모르는 자료원: {unknown} (가능: {list(DECISION_SCOPE)} / all)")
+
+    try:
+        client = DrfClient()
+    except DrfError as exc:
+        _err(str(exc))
+
+    with dbm.connect() as conn:
+        for name in names:
+            src, filters, keep_subjects = DECISION_SCOPE[name]
+            law_pk = dbm.upsert_law(
+                conn,
+                Law(law_id=src.target, name=src.law_name, law_type="결정문",
+                    dept="", promulgated="", enforced=""),
+                mst=src.target,
+            )
+
+            idents = _decision_list(client, src, filters, limit)
+            added = skipped_hash = failed = 0
+            n_chunks = 0
+            off_scope: Counter[str] = Counter()
+
+            for ident, label in idents:
+                try:
+                    raw = client.fetch_decision(src.target, ident)
+                    # 세목은 본문에만 있다. 어차피 본문을 받으므로 여기서 걸러도 공짜다.
+                    if keep_subjects:
+                        subject = parser.decision_field(raw, "세목")
+                        if subject not in keep_subjects:
+                            off_scope[subject or "(없음)"] += 1
+                            continue
+                    article = parser.parse_decision(raw, src, label)
+                except (DrfError, ValueError, requests.RequestException) as exc:
+                    typer.secho(f"  [건너뜀] {label or ident}: {str(exc)[:100]}",
+                                fg=typer.colors.YELLOW)
+                    failed += 1
+                    continue
+
+                article_pk, changed = dbm.upsert_article(conn, law_pk, article)
+                if not changed:
+                    skipped_hash += 1
+                    continue
+                chunks = parser.chunk_decision(src.law_name, article)
+                if not chunks:
+                    continue
+                dbm.replace_chunks(conn, article_pk, chunks,
+                                   embed([c.text for c in chunks]), source_type="decision")
+                added += 1
+                n_chunks += len(chunks)
+
+            typer.secho(
+                f"[적재] {src.law_name}  대상 {len(idents)}건 → 신규·변경 {added} / "
+                f"해시일치 {skipped_hash} / 실패 {failed} / 청크 {n_chunks}",
+                fg=typer.colors.GREEN,
+            )
+            if off_scope:
+                # 범위 밖을 조용히 버리지 않는다 — 얼마나 섞여 있었는지가 판단 근거다.
+                detail = ", ".join(f"{k} {v}" for k, v in off_scope.most_common())
+                typer.echo(f"  범위 밖 {sum(off_scope.values())}건 제외 (세목: {detail})")
+
+        # 코퍼스가 바뀌면 문서빈도도 바뀐다. 갱신하지 않으면 질의 필터가 틀어진다.
+        typer.echo(f"토큰 문서빈도 재집계: {dbm.rebuild_token_df(conn):,}개")
+
+
+def _decision_list(client, src, filters: dict, limit: int) -> list[tuple[str, str]]:
+    """목록을 페이지 끝까지 훑어 (일련번호, 사건번호) 를 모은다.
+
+    필터가 틀리면 에러 없이 무시되므로 `totalCnt` 를 찍어 눈으로 확인할 수 있게 한다.
+    """
+    idents: list[tuple[str, str]] = []
+    total, page = None, 1
+    while True:
+        raw = client.search_decisions(src.target, page=page, **filters)
+        if total is None:
+            total = int(parser.decision_field(raw, "totalCnt") or 0)
+            typer.echo(f"{src.law_name}: 목록 {total}건 (필터 {filters or '없음'})")
+        batch = parser.parse_decision_list(raw, src)
+        if not batch:
+            break
+        idents.extend(batch)
+        if len(idents) >= total or (limit and len(idents) >= limit):
+            break
+        page += 1
+    return idents[:limit] if limit else idents
+
+
 @app.command("refresh-terms")
 def refresh_terms(
     force: bool = typer.Option(False, "--force", help="이미 받아 둔 용어도 다시 받는다"),
@@ -188,7 +298,7 @@ def search(
     typer.echo(f"\n질의: {query}\n" + "─" * 78)
     for i, h in enumerate(hits, 1):
         typer.secho(f"[{i}] {h.law_name} {h.label}", fg=typer.colors.CYAN, bold=True)
-        typer.echo(f"    RRF {h.rrf:.5f}  ({_ranks(h)})  시행 {h.enforced}")
+        typer.echo(f"    RRF {h.rrf:.5f}  ({_ranks(h)})  {h.dated}")
         body = h.text[len(h.header):].strip().replace("\n", " ")
         typer.echo(f"    {body[:150]}...")
 
@@ -199,7 +309,7 @@ def check(
     top: int = typer.Option(8, "--top", help="LLM 에 넘길 조문 수"),
 ) -> None:
     """문장이 어느 조문에 저촉되는지 판단한다."""
-    from .judge import judge  # claude CLI 를 쓰므로 필요할 때만 로드
+    from .judge import JudgeError, judge  # claude CLI 를 쓰므로 필요할 때만 로드
 
     with dbm.connect() as conn:
         hits = _search(conn, sentence, top)
@@ -215,7 +325,16 @@ def check(
 
     typer.echo()
     typer.secho("▸ 판단 중 (claude CLI)...", fg=typer.colors.BRIGHT_BLACK)
-    result = judge(sentence, hits)
+    try:
+        result = judge(sentence, hits)
+    except JudgeError as exc:
+        # 검색은 이미 끝났고 근거 후보도 위에 찍혔다. 판정 단계만 죽은 것이므로
+        # 트레이스백 대신 사유를 밝히고, 남은 결과가 유효하다는 것을 알린다.
+        typer.echo("─" * 78)
+        typer.secho(f"▸ 판정 건너뜀 — {exc}", fg=typer.colors.YELLOW, bold=True)
+        typer.secho("  위 검색 결과는 정상입니다. LLM 백엔드를 복구하면 판정까지 나옵니다.",
+                    fg=typer.colors.BRIGHT_BLACK)
+        raise typer.Exit(1)
 
     color = {
         "위반 소지 있음": typer.colors.RED,

@@ -39,6 +39,13 @@ class SearchHit:
     term_rank: int | None
     rrf: float
 
+    @property
+    def dated(self) -> str:
+        """조문은 시행일, 결정문은 결정일이다. 날짜가 아예 없는 자료원도 있다(증선위)."""
+        if not self.enforced:
+            return ""
+        return f"{'결정' if self.source_type == 'decision' else '시행'} {self.enforced}"
+
 
 def connect(url: str = DATABASE_URL) -> psycopg.Connection:
     conn = psycopg.connect(url, autocommit=True)

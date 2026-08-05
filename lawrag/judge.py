@@ -60,9 +60,8 @@ def build_prompt(question: str, hits: list[SearchHit]) -> str:
     for i, h in enumerate(hits, 1):
         # 본문 API 가 없어 안건명·링크만 있는 자료는 근거로 쓰면 안 된다.
         tag = " [본문 미제공 — 참고용]" if h.source_type == "reference" else ""
-        blocks.append(
-            f"[{i}] {h.law_name} {h.label} (시행 {h.enforced}){tag}\n{h.text}"
-        )
+        dated = f" ({h.dated})" if h.dated else ""
+        blocks.append(f"[{i}] {h.law_name} {h.label}{dated}{tag}\n{h.text}")
     sources = "\n\n".join(blocks) if blocks else "(검색된 조문 없음)"
     return f"{_INSTRUCTIONS}\n\n[질의]\n{question}\n\n[참고 조문]\n{sources}"
 

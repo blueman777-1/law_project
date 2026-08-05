@@ -150,6 +150,23 @@ class DrfClient:
         """법령 본문 XML. parser.parse_law 에 그대로 넘긴다."""
         return self._get(SERVICE_URL, {"target": "law", "MST": mst})
 
+    def search_decisions(self, target: str, page: int = 1, display: int = 100, **filters) -> bytes:
+        """결정문 목록 XML. `display` 최대는 100 이다 — 200 을 줘도 100 만 온다.
+
+        `filters` 로 넘기는 값이 틀리면 **에러 없이 조용히 무시된다.**
+        (`rslYd` 의 `~` 를 퍼센트 인코딩하면 필터가 통째로 사라진다.)
+        호출부가 `totalCnt` 로 좁혀졌는지 확인해야 한다.
+        """
+        return self._get(
+            SEARCH_URL,
+            {"target": target, "display": display, "page": page, **filters},
+            timeout=180,
+        )
+
+    def fetch_decision(self, target: str, ident: str) -> bytes:
+        """결정문 본문 XML. 조회 키가 법령의 `MST` 가 아니라 `ID` 다."""
+        return self._get(SERVICE_URL, {"target": target, "ID": ident}, timeout=180)
+
     def fetch_term_articles(self, term: str) -> list[TermLink]:
         """법령용어가 쓰인 조문 목록. `query` 는 부분일치가 아니라 정확일치다.
 

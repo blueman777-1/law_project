@@ -199,7 +199,7 @@ def check(
     top: int = typer.Option(8, "--top", help="LLM 에 넘길 조문 수"),
 ) -> None:
     """문장이 어느 조문에 저촉되는지 판단한다."""
-    from .judge import judge  # claude CLI 를 쓰므로 필요할 때만 로드
+    from .judge import JudgeError, judge  # claude CLI 를 쓰므로 필요할 때만 로드
 
     with dbm.connect() as conn:
         hits = _search(conn, sentence, top)
@@ -215,7 +215,16 @@ def check(
 
     typer.echo()
     typer.secho("▸ 판단 중 (claude CLI)...", fg=typer.colors.BRIGHT_BLACK)
-    result = judge(sentence, hits)
+    try:
+        result = judge(sentence, hits)
+    except JudgeError as exc:
+        # 검색은 이미 끝났고 근거 후보도 위에 찍혔다. 판정 단계만 죽은 것이므로
+        # 트레이스백 대신 사유를 밝히고, 남은 결과가 유효하다는 것을 알린다.
+        typer.echo("─" * 78)
+        typer.secho(f"▸ 판정 건너뜀 — {exc}", fg=typer.colors.YELLOW, bold=True)
+        typer.secho("  위 검색 결과는 정상입니다. LLM 백엔드를 복구하면 판정까지 나옵니다.",
+                    fg=typer.colors.BRIGHT_BLACK)
+        raise typer.Exit(1)
 
     color = {
         "위반 소지 있음": typer.colors.RED,

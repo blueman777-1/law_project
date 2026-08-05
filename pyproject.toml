@@ -1,0 +1,21 @@
+[project]
+name = "law-rag"
+version = "0.1.0"
+description = "국가법령정보 DRF 기반 하이브리드 검색 + 조문 인용 위법성 점검 CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "model2vec",
+    "typer",
+    "psycopg[binary]",
+    "pgvector",
+    "pyyaml",
+    "lxml",
+    "requests",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

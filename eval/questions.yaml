@@ -1,0 +1,67 @@
+# 검색 품질 평가 문항.
+# expect_article 은 전부 실제 적재 대상 법령의 조문을 확인하고 적은 것이다(추정 아님).
+# 질의는 조문 제목을 그대로 베끼지 않고 사람이 물어볼 법한 말로 쓴다 —
+# 조문 제목을 그대로 쓰면 키워드 검색이 거저 맞혀서 지표가 부풀려진다.
+
+questions:
+  # --- 법인세 축 (9) ---
+  - query: "내국법인은 어떤 소득에 대해 법인세를 내야 하나요"
+    expect_law: "법인세법"
+    expect_article: "제3조"
+
+  - query: "법인세 과세표준은 언제까지 신고해야 하나요"
+    expect_law: "법인세법"
+    expect_article: "제60조"
+
+  - query: "접대비를 한도보다 많이 썼는데 비용으로 인정되나요"
+    expect_law: "법인세법"
+    expect_article: "제25조"
+
+  - query: "법인세율은 몇 퍼센트인가요"
+    expect_law: "법인세법"
+    expect_article: "제55조"
+
+  - query: "지난해 적자를 올해 소득에서 빼려면"
+    expect_law: "법인세법"
+    expect_article: "제13조"
+
+  - query: "감가상각비를 한도보다 많이 잡으면 어떻게 되나요"
+    expect_law: "법인세법"
+    expect_article: "제23조"
+
+  - query: "업무와 상관없이 쓴 돈도 경비 처리가 되나요"
+    expect_law: "법인세법"
+    expect_article: "제27조"
+
+  - query: "법인세를 연중에 미리 나눠 내야 하는 의무"
+    expect_law: "법인세법"
+    expect_article: "제63조"
+
+  - query: "회사의 회계기간은 어떻게 정하나요"
+    expect_law: "법인세법"
+    expect_article: "제6조"
+
+  # --- 외부감사 축 (6) ---
+  - query: "어떤 회사가 외부감사를 의무적으로 받아야 하나요"
+    expect_law: "주식회사 등의 외부감사에 관한 법률"
+    expect_article: "제4조"
+
+  - query: "감사인이 회사의 재무제표를 대신 작성해 주었다"
+    expect_law: "주식회사 등의 외부감사에 관한 법률"
+    expect_article: "제6조"
+
+  - query: "감사인은 사업연도 개시 후 며칠 안에 선임해야 하나요"
+    expect_law: "주식회사 등의 외부감사에 관한 법률"
+    expect_article: "제10조"
+
+  - query: "내부회계관리규정과 조직을 갖춰야 하는 회사"
+    expect_law: "주식회사 등의 외부감사에 관한 법률"
+    expect_article: "제8조"
+
+  - query: "감사보고서에 거짓을 적으면 어떤 처벌을 받나요"
+    expect_law: "주식회사 등의 외부감사에 관한 법률"
+    expect_article: "제39조"
+
+  - query: "상장회사 감사는 회계법인만 할 수 있나요"
+    expect_law: "주식회사 등의 외부감사에 관한 법률"
+    expect_article: "제9조"

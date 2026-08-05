@@ -1,0 +1,11 @@
+.env
+.venv/
+pgdata/
+pgenv/
+.mamba/
+bin/micromamba
+__pycache__/
+*.pyc
+.pytest_cache/
+.claude/settings.local.json
+.DS_Store

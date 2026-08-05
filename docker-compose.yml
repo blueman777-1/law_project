@@ -1,0 +1,21 @@
+# 재현용. 개발 머신에는 docker 가 없어 Postgres.app 을 썼지만,
+# 다른 환경에서는 이걸로 동일한 DB 를 띄울 수 있다.
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: lawrag
+      POSTGRES_PASSWORD: lawrag
+      POSTGRES_DB: lawrag
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lawrag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

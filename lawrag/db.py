@@ -211,19 +211,32 @@ def load_df(conn: psycopg.Connection, tokens: list[str]) -> tuple[dict[str, int]
 # 뜻이라 단순 언급 조문보다 앞세울 근거가 있고, 등장 횟수는 핵심용어 조문이 여럿일 때
 # 어느 쪽이 그 용어를 실제로 다루는지 가른다(제6조가 사업연도 핵심 조문 중 1위가 된다).
 # 로그를 씌워도 결과가 같아 튜닝할 값이 없다 — 가중치가 아니라 tie-break 다.
+#
+# 세 축 모두 정렬 마지막 키가 기본키(id)다. 이게 없으면 1차 키가 같은 청크들의
+# 순서를 실행 계획이 정하고, 코퍼스를 건드릴 때마다 순위가 재배치된다(실제로 겪었다:
+# 결정문을 넣었다 지우니 같은 데이터에서 R@10 이 0.933 → 0.967 로 달라졌다).
+# kw 축이 특히 심하다 — eval 30문항 실측으로 상위 30순위 중 743/900(82.6%)이
+# 동점 그룹 안이고, 25문항은 동점 그룹이 pool 경계를 걸친다(어느 청크가 풀에 드는지도
+# 비결정적이라는 뜻이다). vec·tm 은 실측 동점 0건이라 이 키가 결과를 바꾸지 않는다.
+# 재현성 장치이지 품질 신호가 아니다 — 동점일 때만 발화하므로 1차 키가 이미 가르는
+# 순서에는 개입하지 않고, 1차 키에 단조변환을 씌워도 결과가 같다(불변식 8).
+#
+# 창 함수의 ORDER BY 와 LIMIT 의 ORDER BY 는 반드시 같아야 한다. ROW_NUMBER 는
+# WHERE 를 통과한 전체 행에 매겨지고 LIMIT 이 그 뒤에 자르므로, 둘이 어긋나면
+# 풀에 살아남은 행의 rank 가 1..pool 이 아니게 된다.
 _HYBRID_SQL = """
 WITH vec AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(qv)s) AS rank
+    SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> %(qv)s, id) AS rank
     FROM chunk
     WHERE embedding IS NOT NULL
-    ORDER BY embedding <=> %(qv)s
+    ORDER BY embedding <=> %(qv)s, id
     LIMIT %(pool)s
 ),
 kw AS (
-    SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(tsv, q) DESC) AS rank
+    SELECT id, ROW_NUMBER() OVER (ORDER BY ts_rank_cd(tsv, q) DESC, id) AS rank
     FROM chunk, to_tsquery('simple', %(tsq)s) AS q
     WHERE tsv @@ q
-    ORDER BY ts_rank_cd(tsv, q) DESC
+    ORDER BY ts_rank_cd(tsv, q) DESC, id
     LIMIT %(pool)s
 ),
 tm AS (
@@ -231,7 +244,7 @@ tm AS (
            ROW_NUMBER() OVER (ORDER BY bool_or(t.is_core) DESC,
                                        max((length(a.body) - length(replace(a.body, t.term, '')))
                                            / NULLIF(length(t.term), 0)) DESC,
-                                       min(c.embedding <=> %(qv)s)) AS rank
+                                       min(c.embedding <=> %(qv)s), c.id) AS rank
     FROM chunk c
     JOIN article a ON a.id = c.article_pk
     JOIN law l ON l.id = a.law_pk
@@ -243,7 +256,7 @@ tm AS (
     ORDER BY bool_or(t.is_core) DESC,
              max((length(a.body) - length(replace(a.body, t.term, '')))
                  / NULLIF(length(t.term), 0)) DESC,
-             min(c.embedding <=> %(qv)s)
+             min(c.embedding <=> %(qv)s), c.id
     LIMIT %(pool)s
 )
 SELECT c.id, l.name, a.label, c.header, c.text, a.enforced, c.source_type,

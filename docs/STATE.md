@@ -30,7 +30,8 @@
 > 세대 C 의 0.679 는 이 프로젝트에서 **처음으로 데이터만으로 결정되는 수치**다.
 > 앞으로의 개선 판단은 전부 세대 C 안에서 하라.
 
-작업 트리 clean. 브랜치 `fix/deterministic-tiebreak`.
+`fix/deterministic-tiebreak` 4커밋을 **`main` 에 머지하고 원격에 push 했다**(`b0d6dd3`).
+작업 트리 clean, `main` = `origin/main`. **다음 세션은 `main` 에서 바로 시작하면 된다.**
 
 ### 세션 4 요약 (2026-08-05, 종료)
 

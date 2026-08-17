@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>law-rag</title>
+<style>
+  :root {
+    --bg: #f7f7f5;      --panel: #fff;      --ink: #1a1a18;
+    --muted: #6b6b66;   --line: #e2e1dc;    --accent: #3b5bdb;
+    --red: #c92a2a;     --green: #2b8a3e;   --amber: #b07d00;
+    --code: #f1f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;    --panel: #1e1e23;   --ink: #e8e8e4;
+      --muted: #9a9a94; --line: #33333a;    --accent: #8aa2ff;
+      --red: #ff8787;   --green: #69db7c;   --amber: #ffd43b;
+      --code: #26262c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+          "Pretendard", "Malgun Gothic", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 80px; }
+
+  header { margin-bottom: 28px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  h1 .dot { color: var(--accent); }
+  header p { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+  .box {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px;
+  }
+  textarea {
+    width: 100%; min-height: 76px; resize: vertical; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 9px; background: var(--bg);
+    color: var(--ink); font: inherit; line-height: 1.6;
+  }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: 9px 20px; font: 600 14px/1 inherit; cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 14px; }
+  .chip {
+    background: transparent; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 12px; font: 400 12.5px/1.4 inherit;
+    cursor: pointer; text-align: left;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  section { margin-top: 28px; }
+  .cap {
+    font: 600 11.5px/1 inherit; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 12px;
+  }
+
+  .expand { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .expand b { color: var(--accent); font-weight: 600; }
+
+  .hit { border-top: 1px solid var(--line); padding: 13px 0; }
+  .hit:first-of-type { border-top: 0; padding-top: 4px; }
+  .hit-h { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; }
+  .no { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 20px; }
+  .law { font-weight: 600; }
+  .ttl { color: var(--muted); font-size: 13.5px; }
+  .meta { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .rank {
+    font: 500 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--code); border: 1px solid var(--line); border-radius: 5px;
+    padding: 4px 6px; color: var(--muted);
+  }
+  .rank.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .rrf { font: 400 11.5px/1 ui-monospace, Menlo, monospace; color: var(--muted); }
+  .snip {
+    margin: 7px 0 0 29px; color: var(--muted); font-size: 13.5px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  .verdict { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .badge {
+    font: 700 17px/1 inherit; padding: 10px 16px; border-radius: 9px;
+    border: 1px solid currentColor;
+  }
+  .v-red   { color: var(--red);   background: color-mix(in srgb, var(--red) 9%, transparent); }
+  .v-green { color: var(--green); background: color-mix(in srgb, var(--green) 9%, transparent); }
+  .v-amber { color: var(--amber); background: color-mix(in srgb, var(--amber) 11%, transparent); }
+
+  .cite { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; margin: 14px 0; }
+  .cite.miss { border-left-color: var(--amber); }
+  .cite h4 { margin: 0 0 4px; font-size: 14.5px; color: var(--accent); font-weight: 600; }
+  .cite.miss h4 { color: var(--amber); }
+  .cite .date { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+  .cite p { margin: 6px 0 0; font-size: 13.5px; white-space: pre-wrap; }
+  .warn { color: var(--amber); font-size: 13px; }
+
+  .reason { white-space: pre-wrap; }
+  .disc { color: var(--muted); font-size: 12.5px; margin-top: 22px; }
+  .err { color: var(--red); font-size: 13.5px; }
+  .wait { color: var(--muted); font-size: 13.5px; }
+  .wait::after { content: "…"; animation: dots 1.2s steps(4, end) infinite; }
+  @keyframes dots { 0% { opacity: .3 } 50% { opacity: 1 } 100% { opacity: .3 } }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>law-rag<span class="dot">.</span></h1>
+    <p>문장을 넣으면 저촉되는 조문을 찾아 법령명·조번호·시행일과 함께 위법 여부를 판단합니다.
+       코퍼스는 법인세 + 외부감사 5개 법령 1,127청크.</p>
+  </header>
+
+  <div class="box">
+    <textarea id="q" placeholder="예: 감사인이 회사의 재무제표를 대신 작성해 주었다"></textarea>
+    <div class="row">
+      <button id="go">점검</button>
+      <span class="hint">⌘/Ctrl + Enter</span>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <section id="searchSec" hidden>
+    <div class="cap">검색된 근거 후보</div>
+    <div class="box">
+      <div class="expand" id="expand" hidden></div>
+      <div id="hits"></div>
+    </div>
+  </section>
+
+  <section id="judgeSec" hidden>
+    <div class="cap">판정</div>
+    <div class="box" id="judgeBox"></div>
+  </section>
+
+</div>
+
+<script>
+const EXAMPLES = [
+  "감사인이 회사의 재무제표를 대신 작성해 주었다",
+  "자산 500억 원인 주식회사가 외부감사를 받지 않았다",
+  "접대비를 한도 없이 전액 비용 처리했다",
+  "감사인이 피감회사 주식을 보유한 채 감사를 수행했다",
+  "회사가 대표이사·회계담당 임원 책임으로 재무제표를 작성해 제출했다",
+];
+const VERDICT_CLASS = {
+  "위반 소지 있음": "v-red",
+  "위반으로 보기 어려움": "v-green",
+  "정보 부족": "v-amber",
+};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => (s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+EXAMPLES.forEach((text) => {
+  const b = document.createElement("button");
+  b.className = "chip";
+  b.textContent = text;
+  b.onclick = () => { $("q").value = text; run(); };
+  $("chips").append(b);
+});
+
+async function post(path, sentence) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sentence }),
+  });
+  return res.json();
+}
+
+function renderHits(data) {
+  const q = data.sentence.trim();
+  $("expand").hidden = data.expanded === q;
+  if (!$("expand").hidden) {
+    const added = data.expanded.slice(q.length).trim();
+    $("expand").innerHTML = `용어 확장 — 질의에 법령용어 <b>${esc(added)}</b> 를 덧붙여 검색했습니다.`;
+  }
+  $("hits").innerHTML = data.hits.map((h, i) => {
+    const rank = (k, v) => `<span class="rank ${v !== "-" ? "on" : ""}">${k}#${v}</span>`;
+    return `<div class="hit">
+      <div class="hit-h">
+        <span class="no">${i + 1}</span>
+        <span class="law">${esc(h.law)} ${esc(h.label)}</span>
+        ${h.title ? `<span class="ttl">${esc(h.title)}</span>` : ""}
+        <span class="meta">
+          <span class="rrf">RRF ${h.rrf.toFixed(5)}</span>
+          ${rank("v", h.ranks.v)}${rank("k", h.ranks.k)}${rank("t", h.ranks.t)}
+        </span>
+      </div>
+      <div class="snip">${esc(h.body)}</div>
+    </div>`;
+  }).join("");
+  $("searchSec").hidden = false;
+}
+
+function renderJudgment(d) {
+  if (d.error) {
+    $("judgeBox").innerHTML =
+      `<div class="err">판정 건너뜀 — ${esc(d.error)}</div>
+       <div class="hint" style="margin-top:6px">위 검색 결과는 정상입니다. LLM 백엔드를 복구하면 판정까지 나옵니다.</div>`;
+    return;
+  }
+  const cites = d.cited.map((c) => c.found
+    ? `<div class="cite">
+         <h4>${esc(c.law)} ${esc(c.article)} ${esc(c.clause)}
+           <span class="date">${esc(c.dated)}</span></h4>
+         <p>${esc(c.body)}</p>
+       </div>`
+    : `<div class="cite miss">
+         <h4>${esc(c.law)} ${esc(c.article)} ${esc(c.clause)}</h4>
+         <div class="warn">⚠ 검색 결과에 없는 조문입니다 — 인용을 신뢰하지 마세요.</div>
+       </div>`).join("");
+
+  $("judgeBox").innerHTML = `
+    <div class="verdict">
+      <span class="badge ${VERDICT_CLASS[d.verdict] || ""}">${esc(d.verdict)}</span>
+      ${d.confidence ? `<span class="hint">신뢰도 ${esc(d.confidence)}</span>` : ""}
+    </div>
+    ${cites ? `<div class="cap" style="margin:22px 0 0">근거 조문</div>${cites}` : ""}
+    <div class="cap" style="margin:22px 0 8px">이유</div>
+    <div class="reason">${esc(d.reason)}</div>
+    <div class="disc">${esc(d.disclaimer)}</div>`;
+}
+
+async function run() {
+  const sentence = $("q").value.trim();
+  if (!sentence) return;
+  $("go").disabled = true;
+  $("judgeSec").hidden = true;
+  $("searchSec").hidden = true;
+
+  try {
+    const search = await post("/api/search", sentence);
+    if (search.error) throw new Error(search.error);
+    renderHits(search);
+
+    $("judgeSec").hidden = false;
+    $("judgeBox").innerHTML = `<div class="wait">조문을 근거로 판단 중 (claude CLI)</div>`;
+    renderJudgment(await post("/api/judge", sentence));
+  } catch (e) {
+    $("judgeSec").hidden = false;
+    $("judgeBox").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  } finally {
+    $("go").disabled = false;
+  }
+}
+
+$("go").onclick = run;
+$("q").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
+});
+</script>
+</body>
+</html>

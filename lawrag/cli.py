@@ -5,6 +5,7 @@
     refresh-terms  terms.yaml 의 법령용어별 연계조문 적재
     search         하이브리드 검색 (벡터 + 키워드 + 용어연계 RRF)
     check          문장을 넣으면 저촉되는 조문과 위법 여부를 판단
+    serve          위 check 를 브라우저에서 (http://127.0.0.1:8000)
     eval           Recall@5 / Recall@10 / MRR
 """
 from __future__ import annotations
@@ -365,6 +366,17 @@ def check(
 
     typer.echo(f"\n▸ 이유\n  {result.reason}")
     typer.secho(f"\n{DISCLAIMER}", fg=typer.colors.BRIGHT_BLACK)
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8000, "--port", "-p"),
+) -> None:
+    """브라우저에서 문장을 넣어 결과를 눈으로 확인한다 (check 와 같은 경로를 쓴다)."""
+    from . import web  # 표준 라이브러리 서버. 필요할 때만 올린다
+
+    web.serve(host, port)
 
 
 @app.command("eval")

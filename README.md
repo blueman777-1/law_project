@@ -9,7 +9,7 @@ $ python -m lawrag.cli check "감사인이 회사의 재무제표를 대신 작�
 문장을 넣으면 저촉되는 조문을 찾아 **법령명 · 조번호 · 시행일과 함께** 위법 여부를 판단한다.
 
 > **상태: 완료.** 코퍼스 714조문 / 1,127청크, eval 50문항 **R@5 0.720 · R@10 0.780 · MRR 0.547**,
-> 테스트 116개. 마지막 세 번의 작업은 기능 추가가 아니라 **이미 있는 장치를 다시 재는 일**이었고
+> 테스트 126개. 마지막 세 번의 작업은 기능 추가가 아니라 **이미 있는 장치를 다시 재는 일**이었고
 > 셋 다 「바꾸지 않음」으로 끝났다 — 근거는 [개선을 멈춘 지점](#개선을-멈춘-지점--세-층을-전부-재고-멈췄다).
 
 ---
@@ -121,6 +121,7 @@ python -m lawrag.cli refresh-terms   # 용어→조문 연계 (검색 3번째 �
 ```bash
 python -m lawrag.cli search "감사인 독립성"     # 세 축의 순위를 함께 표시 (v#/k#/t#)
 python -m lawrag.cli check "<점검할 문장>"      # 위법 여부 + 근거 조문
+python -m lawrag.cli serve                     # 위 check 를 브라우저에서 (127.0.0.1:8000)
 python -m lawrag.cli eval                      # Recall@5 / Recall@10 / MRR
 python -m lawrag.cli refresh                   # 개정된 조문만 재임베딩
 python -m lawrag.cli refresh-terms             # terms.yaml 을 고쳤을 때만
